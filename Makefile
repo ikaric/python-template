@@ -4,7 +4,7 @@ UV ?= uv
 VENV ?= .venv
 BIN := $(VENV)/bin
 
-.PHONY: help venv install install-dev dev prod run test lint format clean docker-build docker-run docker-dev docker-down
+.PHONY: help venv install install-dev dev prod run test lint format clean docker-build docker-clean docker-run docker-dev docker-down docker-down-volumes
 
 help:
 	@echo "Setup:"
@@ -22,9 +22,10 @@ help:
 	@echo ""
 	@echo "Docker:"
 	@echo "  docker-build Build Docker image"
-	@echo "  docker-run   Run Docker container (production)"
-	@echo "  docker-dev   Run Docker container (development with reload)"
+	@echo "  docker-run   Build and run production container"
+	@echo "  docker-dev   Build and run development container (debugpy on :5678)"
 	@echo "  docker-down  Stop and remove containers"
+	@echo "  docker-down-volumes  Stop containers and remove volumes"
 	@echo ""
 	@echo "Maintenance:"
 	@echo "  clean        Remove build artifacts and venv"
@@ -64,15 +65,22 @@ format:
 docker-build:
 	docker build -t python-template:latest --target runtime .
 
-docker-run: docker-build
-	docker compose up -d api
+docker-clean:
+	@docker compose down >/dev/null 2>&1 || true
+
+docker-run:
+	@$(MAKE) docker-clean
+	docker compose up -d --build api
 
 docker-dev:
-	docker build -t python-template:dev --target runtime-dev .
-	docker compose --profile dev up -d api-dev
+	@$(MAKE) docker-clean
+	docker compose --profile dev up -d --build api-dev
 
 docker-down:
-	docker compose down
+	@docker compose down
+
+docker-down-volumes:
+	@docker compose down -v
 
 clean:
 	rm -rf $(VENV) build dist *.egg-info .pytest_cache .coverage coverage.xml htmlcov .ruff_cache
