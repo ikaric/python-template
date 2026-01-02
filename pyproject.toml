@@ -1,0 +1,60 @@
+[build-system]
+requires = ["hatchling>=1.21.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "python-template"
+version = "0.1.0"
+description = "A reusable Python project template with FastAPI, uv, and Docker"
+readme = "README.md"
+requires-python = ">=3.12"
+authors = []
+dependencies = [
+    "fastapi>=0.115.0",
+    "pydantic>=2.10.0",
+    "pydantic-settings>=2.7.0",
+    "python-dotenv>=1.0.0",
+    "uvicorn>=0.34.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "debugpy>=1.8.0",
+    "httpx>=0.28.0",
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24.0",
+    "pytest-cov>=5.0",
+    "ruff>=0.9.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/python_template"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "src/python_template/**",
+    "pyproject.toml",
+    "README.md",
+    "Makefile",
+    "Dockerfile",
+    ".dockerignore",
+    ".gitignore",
+    ".editorconfig",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+src = ["src"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"

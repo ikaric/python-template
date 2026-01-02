@@ -1,0 +1,43 @@
+services:
+  api:
+    build:
+      context: .
+      target: runtime
+    environment:
+      PYTHON_TEMPLATE_HOST: "0.0.0.0"
+      PYTHON_TEMPLATE_PORT: "8000"
+      PYTHON_TEMPLATE_LOG_LEVEL: "${PYTHON_TEMPLATE_LOG_LEVEL:-info}"
+      PYTHON_TEMPLATE_LOG_FORMAT: "${PYTHON_TEMPLATE_LOG_FORMAT:-json}"
+    ports:
+      - "${PYTHON_TEMPLATE_PORT_PUBLISH:-8000}:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+  api-dev:
+    build:
+      context: .
+      target: runtime-dev
+    profiles: ["dev"]
+    environment:
+      PYTHON_TEMPLATE_HOST: "0.0.0.0"
+      PYTHON_TEMPLATE_PORT: "8000"
+      PYTHON_TEMPLATE_LOG_LEVEL: "${PYTHON_TEMPLATE_LOG_LEVEL:-debug}"
+      PYTHON_TEMPLATE_LOG_FORMAT: "${PYTHON_TEMPLATE_LOG_FORMAT:-pretty}"
+      PYTHON_TEMPLATE_DEBUGPY: "1"
+      PYTHON_TEMPLATE_DEBUGPY_HOST: "0.0.0.0"
+      PYTHON_TEMPLATE_DEBUGPY_PORT: "5678"
+    ports:
+      - "${PYTHON_TEMPLATE_PORT_PUBLISH:-8000}:8000"
+      - "${PYTHON_TEMPLATE_DEBUGPY_PORT_PUBLISH:-5678}:5678"
+    volumes:
+      - ./src:/app/src
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
