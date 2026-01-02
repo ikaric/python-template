@@ -70,7 +70,7 @@
 
 ```bash
 # 1️⃣ Clone the repository
-git clone https://github.com/yourusername/python-template.git
+git clone https://github.com/ikaric/python-template.git
 cd python-template
 
 # 2️⃣ Copy environment configuration
