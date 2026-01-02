@@ -73,8 +73,9 @@
 git clone https://github.com/ikaric/python-template.git
 cd python-template
 
-# 2️⃣ Copy environment configuration
+# 2️⃣ Copy configuration files
 cp env.example .env
+cp -r .vscode.example .vscode
 
 # 3️⃣ Install dependencies
 make install-dev
@@ -214,7 +215,7 @@ python-template/
 │   ├── test_health.py
 │   └── test_items.py
 │
-├── .vscode/                      # 💻 VS Code configuration
+├── .vscode.example/              # 💻 VS Code configuration (copy to .vscode/)
 │   ├── settings.json
 │   ├── launch.json
 │   └── extensions.json
@@ -509,7 +510,7 @@ make docker-dev
 
 ### Debug Configuration
 
-The `.vscode/launch.json` includes three configurations:
+The `.vscode.example/launch.json` (copy to `.vscode/`) includes three configurations:
 
 | Configuration | Use Case |
 |--------------|----------|
@@ -609,6 +610,7 @@ find . -type f -name "*.example" -o -name ".env" \
 
 ### Customization Checklist
 
+- [ ] Copy config files: `cp env.example .env && cp -r .vscode.example .vscode`
 - [ ] Rename `src/python_template` to `src/your_package`
 - [ ] Update `pyproject.toml`:
   - [ ] `name`
@@ -619,7 +621,7 @@ find . -type f -name "*.example" -o -name ".env" \
 - [ ] Update `Makefile` uvicorn command
 - [ ] Update `env.example` variable prefix
 - [ ] Update `docker-compose.yml` environment variables
-- [ ] Update `.vscode/launch.json` module name
+- [ ] Update `.vscode.example/launch.json` module name
 - [ ] Remove example `ItemService`, `Item` model, and related code
 - [ ] Update this README for your project
 
