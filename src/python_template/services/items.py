@@ -1,90 +1,97 @@
-"""Item service with in-memory storage.
+"""Item service with business logic.
 
-Example service implementation demonstrating the CRUD pattern.
-Easily swappable for database-backed storage.
+Service layer for Item entities, handling business rules and validation.
+Data access is delegated to the ItemRepository.
 """
 
 from __future__ import annotations
 
-import uuid
-from datetime import UTC, datetime
-
 from python_template.api.exceptions import NotFoundError
 from python_template.api.schemas import ItemCreate, ItemUpdate
 from python_template.models import Item
+from python_template.repositories import ItemRepository
 from python_template.services.base import BaseService
 
 
 class ItemService(BaseService[Item, ItemCreate, ItemUpdate]):
-    """Item service with in-memory storage.
+    """Item service handling business logic.
 
-    This is an example implementation using a simple dict for storage.
-    Replace with database operations for production use.
+    Delegates data access to ItemRepository while providing:
+    - Convenience methods that raise exceptions
+    - Business validation
+    - Future: authorization, events, caching
+
+    Example:
+        >>> repo = ItemRepository()
+        >>> service = ItemService(repo)
+        >>> item = await service.create(ItemCreate(name="Test"))
+        >>> item = await service.get_or_raise(item.id)
     """
 
-    def __init__(self) -> None:
-        self._storage: dict[str, Item] = {}
+    def __init__(self, repository: ItemRepository) -> None:
+        """Initialize service with item repository.
 
-    async def get(self, id: str) -> Item | None:
-        """Get an item by ID."""
-        return self._storage.get(id)
+        Args:
+            repository: The item data access repository.
+        """
+        super().__init__(repository)
+        self._item_repo = repository
 
     async def get_or_raise(self, id: str) -> Item:
-        """Get an item by ID or raise NotFoundError."""
+        """Get an item by ID or raise NotFoundError.
+
+        Args:
+            id: The item identifier.
+
+        Returns:
+            The item.
+
+        Raises:
+            NotFoundError: If item not found.
+        """
         item = await self.get(id)
         if item is None:
             raise NotFoundError(resource="Item", identifier=id)
         return item
 
-    async def list(self, skip: int = 0, limit: int = 100) -> list[Item]:
-        """List all items with pagination."""
-        items = list(self._storage.values())
-        return items[skip : skip + limit]
-
-    async def create(self, data: ItemCreate) -> Item:
-        """Create a new item."""
-        now = datetime.now(UTC)
-        item = Item(
-            id=str(uuid.uuid4()),
-            name=data.name,
-            description=data.description,
-            created_at=now,
-            updated_at=now,
-        )
-        self._storage[item.id] = item
-        return item
-
-    async def update(self, id: str, data: ItemUpdate) -> Item | None:
-        """Update an existing item."""
-        item = self._storage.get(id)
-        if item is None:
-            return None
-
-        # Apply updates
-        update_data = data.model_dump(exclude_unset=True)
-        if update_data:
-            update_data["updated_at"] = datetime.now(UTC)
-            updated_item = item.model_copy(update=update_data)
-            self._storage[id] = updated_item
-            return updated_item
-
-        return item
-
     async def update_or_raise(self, id: str, data: ItemUpdate) -> Item:
-        """Update an item or raise NotFoundError."""
+        """Update an item or raise NotFoundError.
+
+        Args:
+            id: The item identifier.
+            data: The update data.
+
+        Returns:
+            The updated item.
+
+        Raises:
+            NotFoundError: If item not found.
+        """
         item = await self.update(id, data)
         if item is None:
             raise NotFoundError(resource="Item", identifier=id)
         return item
 
-    async def delete(self, id: str) -> bool:
-        """Delete an item by ID."""
-        if id in self._storage:
-            del self._storage[id]
-            return True
-        return False
-
     async def delete_or_raise(self, id: str) -> None:
-        """Delete an item or raise NotFoundError."""
-        if not await self.delete(id):
+        """Delete an item or raise NotFoundError.
+
+        Args:
+            id: The item identifier.
+
+        Raises:
+            NotFoundError: If item not found.
+        """
+        deleted = await self.delete(id)
+        if not deleted:
             raise NotFoundError(resource="Item", identifier=id)
+
+    async def find_by_name(self, name: str) -> list[Item]:
+        """Find items by name (case-insensitive partial match).
+
+        Args:
+            name: The name to search for.
+
+        Returns:
+            List of matching items.
+        """
+        return await self._item_repo.find_by_name(name)

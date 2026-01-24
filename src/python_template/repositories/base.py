@@ -1,43 +1,33 @@
-"""Base service class for business logic.
+"""Base repository interface for data access.
 
-Services orchestrate business logic and delegate data access to repositories.
+Defines the contract that all repository implementations must follow.
 """
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
+
 from pydantic import BaseModel
 
-from python_template.repositories.base import BaseRepository
 
-
-class BaseService[T: BaseModel, CreateT: BaseModel, UpdateT: BaseModel]:
-    """Base service that delegates data access to a repository.
+class BaseRepository[T: BaseModel, CreateT: BaseModel, UpdateT: BaseModel](ABC):
+    """Abstract base repository with CRUD method signatures.
 
     Type Parameters:
         T: The entity model type (e.g., Item)
         CreateT: The create request model (e.g., ItemCreate)
         UpdateT: The update request model (e.g., ItemUpdate)
 
-    Services handle:
-    - Business logic and validation
-    - Orchestration of multiple operations
-    - Event emission
-    - Authorization checks
-
-    Repositories handle:
-    - Data persistence
-    - Query execution
-    - Transaction management
+    This interface allows swapping storage backends without changing
+    service or route code. Implement this for:
+    - In-memory storage (pandas DataFrame)
+    - MongoDB
+    - PostgreSQL
+    - Redis
+    - etc.
     """
 
-    def __init__(self, repository: BaseRepository[T, CreateT, UpdateT]) -> None:
-        """Initialize service with repository.
-
-        Args:
-            repository: The data access repository.
-        """
-        self._repository = repository
-
+    @abstractmethod
     async def get(self, id: str) -> T | None:
         """Get a single entity by ID.
 
@@ -47,8 +37,9 @@ class BaseService[T: BaseModel, CreateT: BaseModel, UpdateT: BaseModel]:
         Returns:
             The entity if found, None otherwise.
         """
-        return await self._repository.get(id)
+        ...
 
+    @abstractmethod
     async def list(self, skip: int = 0, limit: int = 100) -> list[T]:
         """List entities with pagination.
 
@@ -59,8 +50,9 @@ class BaseService[T: BaseModel, CreateT: BaseModel, UpdateT: BaseModel]:
         Returns:
             List of entities.
         """
-        return await self._repository.list(skip, limit)
+        ...
 
+    @abstractmethod
     async def create(self, data: CreateT) -> T:
         """Create a new entity.
 
@@ -70,8 +62,9 @@ class BaseService[T: BaseModel, CreateT: BaseModel, UpdateT: BaseModel]:
         Returns:
             The created entity.
         """
-        return await self._repository.create(data)
+        ...
 
+    @abstractmethod
     async def update(self, id: str, data: UpdateT) -> T | None:
         """Update an existing entity.
 
@@ -82,8 +75,9 @@ class BaseService[T: BaseModel, CreateT: BaseModel, UpdateT: BaseModel]:
         Returns:
             The updated entity if found, None otherwise.
         """
-        return await self._repository.update(id, data)
+        ...
 
+    @abstractmethod
     async def delete(self, id: str) -> bool:
         """Delete an entity by ID.
 
@@ -93,16 +87,18 @@ class BaseService[T: BaseModel, CreateT: BaseModel, UpdateT: BaseModel]:
         Returns:
             True if deleted, False if not found.
         """
-        return await self._repository.delete(id)
+        ...
 
+    @abstractmethod
     async def count(self) -> int:
         """Count total entities.
 
         Returns:
             Total number of entities.
         """
-        return await self._repository.count()
+        ...
 
+    @abstractmethod
     async def exists(self, id: str) -> bool:
         """Check if an entity exists.
 
@@ -112,4 +108,12 @@ class BaseService[T: BaseModel, CreateT: BaseModel, UpdateT: BaseModel]:
         Returns:
             True if exists, False otherwise.
         """
-        return await self._repository.exists(id)
+        ...
+
+    @abstractmethod
+    async def clear(self) -> None:
+        """Remove all entities.
+
+        Useful for testing and development.
+        """
+        ...

@@ -4,7 +4,7 @@ UV ?= uv
 VENV ?= .venv
 BIN := $(VENV)/bin
 
-.PHONY: help venv install install-dev dev prod run test lint format clean docker-build docker-clean docker-run docker-dev docker-down docker-down-volumes
+.PHONY: help venv install install-dev dev prod run test lint format typecheck check pre-commit clean docker-build docker-clean docker-run docker-dev docker-down docker-down-volumes
 
 help:
 	@echo "Setup:"
@@ -19,6 +19,9 @@ help:
 	@echo "  test         Run test suite with coverage"
 	@echo "  lint         Lint code with ruff"
 	@echo "  format       Format code with ruff"
+	@echo "  typecheck    Type check with mypy"
+	@echo "  check        Run lint, typecheck, and test"
+	@echo "  pre-commit   Run pre-commit hooks on all files"
 	@echo ""
 	@echo "Docker:"
 	@echo "  docker-build Build Docker image"
@@ -61,6 +64,14 @@ lint:
 
 format:
 	$(UV) run --extra dev ruff format src/ tests/
+
+typecheck:
+	$(UV) run --extra dev mypy src/
+
+check: lint typecheck test
+
+pre-commit:
+	$(UV) run --extra dev pre-commit run --all-files
 
 docker-build:
 	docker build -t python-template:latest --target runtime .

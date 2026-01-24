@@ -34,7 +34,7 @@
 | 🚀 **uv** | Blazing fast dependency management |
 | 🐳 **Docker** | Multi-stage builds with official uv image |
 | 🧪 **Testing** | pytest with async support and coverage |
-| 🎨 **Code Quality** | Ruff for linting and formatting |
+| 🎨 **Code Quality** | Ruff, mypy, and pre-commit hooks |
 | 🔧 **Makefile** | One-command setup and development |
 | 🐛 **Debugging** | VS Code + debugpy integration |
 | 📝 **Structured Logging** | JSON (production) or pretty (development) |
@@ -122,19 +122,30 @@ graph TB
         Models[models/]
     end
 
+    subgraph data[Data Layer]
+        Repos[repositories/]
+        Storage[In-Memory DataFrame]
+    end
+
     subgraph infra[Infrastructure]
         Config[config.py]
         Logging[logging.py]
         Debug[debug.py]
     end
 
+    subgraph future[Future: Database]
+        DB[(MongoDB/SQL)]
+    end
+
     Client --> Routes
     Routes --> Schemas
     Routes --> Services
     Services --> Models
+    Services --> Repos
+    Repos --> Storage
+    Repos -.->|swap later| DB
     Routes -.-> Exceptions
     Services --> Config
-    Services --> Logging
 ```
 
 ### Request Flow
@@ -145,14 +156,17 @@ sequenceDiagram
     participant R as Route
     participant S as Schema
     participant Svc as Service
-    participant M as Model
+    participant Repo as Repository
+    participant DF as DataFrame
 
     C->>R: HTTP Request
     R->>S: Validate Input
     S-->>R: ItemCreate
     R->>Svc: service.create(data)
-    Svc->>M: Create Item
-    M-->>Svc: Item
+    Svc->>Repo: repo.create(data)
+    Repo->>DF: Insert Row
+    DF-->>Repo: Row Data
+    Repo-->>Svc: Item
     Svc-->>R: Item
     R->>S: Serialize Response
     S-->>C: JSON Response
@@ -164,7 +178,8 @@ sequenceDiagram
 |-------|---------|---------|
 | **routes/** | HTTP handlers, request/response | `GET /v1/items/{id}` |
 | **schemas/** | Request/response validation | `ItemCreate`, `ItemUpdate` |
-| **services/** | Business logic | `ItemService.create()` |
+| **services/** | Business logic, orchestration | `ItemService.get_or_raise()` |
+| **repositories/** | Data access abstraction | `ItemRepository.create()` |
 | **models/** | Domain entities | `Item` |
 | **exceptions.py** | Error handling | `NotFoundError` |
 | **config.py** | Environment settings | `Settings.log_level` |
@@ -186,6 +201,12 @@ python-template/
 │       ├── models/               # 📦 Domain entities
 │       │   ├── __init__.py
 │       │   └── items.py          #    Item model
+│       │
+│       ├── repositories/         # 💾 Data access layer
+│       │   ├── __init__.py
+│       │   ├── base.py           #    BaseRepository interface
+│       │   ├── memory.py         #    InMemoryRepository (pandas)
+│       │   └── items.py          #    ItemRepository
 │       │
 │       ├── services/             # 💼 Business logic
 │       │   ├── __init__.py
@@ -224,6 +245,7 @@ python-template/
 ├── Makefile                     # 🔧 Development commands
 ├── Dockerfile                   # 🐳 Container build
 ├── docker-compose.yml           # 🐳 Container orchestration
+├── .pre-commit-config.yaml      # 🔍 Pre-commit hooks
 ├── env.example                  # ⚙️  Environment template
 ├── .gitignore
 ├── .dockerignore
@@ -254,6 +276,9 @@ All common tasks are available through `make`. Run `make help` for the full list
 | `make test` | Run tests with coverage report |
 | `make lint` | Check code with Ruff |
 | `make format` | Format code with Ruff |
+| `make typecheck` | Type check with mypy |
+| `make check` | Run lint, typecheck, and test |
+| `make pre-commit` | Run pre-commit hooks on all files |
 
 ### Docker Commands
 
@@ -335,9 +360,10 @@ Follow this pattern to add new features (e.g., `users`):
 ```mermaid
 graph LR
     A[1. Model] --> B[2. Schemas]
-    B --> C[3. Service]
-    C --> D[4. Routes]
-    D --> E[5. Tests]
+    B --> C[3. Repository]
+    C --> D[4. Service]
+    D --> E[5. Routes]
+    E --> F[6. Tests]
 ```
 
 #### Step 1: Create the Model
@@ -368,19 +394,52 @@ class UserUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=100)
 ```
 
-#### Step 3: Create the Service
+#### Step 3: Create the Repository
+
+```python
+# src/python_template/repositories/users.py
+from python_template.repositories.memory import InMemoryRepository
+from python_template.models import User
+from python_template.api.schemas import UserCreate, UserUpdate
+
+class UserRepository(InMemoryRepository[User, UserCreate, UserUpdate]):
+    """User repository with in-memory storage.
+
+    To swap to a database:
+    1. Create UserMongoRepository or UserSQLRepository
+    2. Implement BaseRepository interface
+    3. Change this class to inherit from the new implementation
+    """
+
+    async def find_by_email(self, email: str) -> User | None:
+        """Find user by email address."""
+        if self._df.empty:
+            return None
+        mask = self._df["email"] == email
+        if not mask.any():
+            return None
+        return self._row_to_model(self._df[mask].iloc[0])
+```
+
+#### Step 4: Create the Service
 
 ```python
 # src/python_template/services/users.py
 from python_template.services.base import BaseService
 from python_template.models import User
 from python_template.api.schemas import UserCreate, UserUpdate
+from python_template.repositories.users import UserRepository
 
 class UserService(BaseService[User, UserCreate, UserUpdate]):
-    # Implement CRUD methods...
+    def __init__(self, repository: UserRepository) -> None:
+        super().__init__(repository)
+        self._user_repo = repository
+
+    async def get_by_email(self, email: str) -> User | None:
+        return await self._user_repo.find_by_email(email)
 ```
 
-#### Step 4: Create the Routes
+#### Step 5: Create the Routes
 
 ```python
 # src/python_template/api/routes/users.py
@@ -393,7 +452,7 @@ async def create_user(data: UserCreate, service: UserServiceDep) -> User:
     return await service.create(data)
 ```
 
-#### Step 5: Register the Router
+#### Step 6: Register the Router
 
 ```python
 # src/python_template/api/routes/__init__.py
@@ -405,7 +464,20 @@ def build_router() -> APIRouter:
     return router
 ```
 
-#### Step 6: Write Tests
+#### Step 7: Wire in Lifespan
+
+```python
+# src/python_template/api/lifespan.py
+from python_template.repositories.users import UserRepository
+from python_template.services.users import UserService
+
+# In lifespan():
+user_repository = UserRepository()
+user_service = UserService(user_repository)
+app.state.user_service = user_service
+```
+
+#### Step 8: Write Tests
 
 ```python
 # tests/test_users.py
@@ -413,6 +485,52 @@ def test_create_user(client: TestClient) -> None:
     response = client.post("/v1/users", json={"email": "test@example.com", "name": "Test"})
     assert response.status_code == 201
 ```
+
+---
+
+## 🔄 Swapping to a Database
+
+The repository pattern makes database integration straightforward:
+
+### Option 1: MongoDB
+
+```python
+# src/python_template/repositories/mongo.py
+from motor.motor_asyncio import AsyncIOMotorCollection
+from python_template.repositories.base import BaseRepository
+
+class MongoRepository[T, CreateT, UpdateT](BaseRepository[T, CreateT, UpdateT]):
+    def __init__(self, collection: AsyncIOMotorCollection) -> None:
+        self._collection = collection
+
+    async def get(self, id: str) -> T | None:
+        doc = await self._collection.find_one({"_id": id})
+        return self._model_type.model_validate(doc) if doc else None
+
+    # ... implement other methods
+```
+
+### Option 2: PostgreSQL with SQLAlchemy
+
+```python
+# src/python_template/repositories/postgres.py
+from sqlalchemy.ext.asyncio import AsyncSession
+from python_template.repositories.base import BaseRepository
+
+class PostgresRepository[T, CreateT, UpdateT](BaseRepository[T, CreateT, UpdateT]):
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    # ... implement CRUD methods using SQLAlchemy
+```
+
+### Migration Steps
+
+1. Install database driver (`motor`, `asyncpg`, `sqlalchemy`, etc.)
+2. Create database-specific repository implementing `BaseRepository`
+3. Update `lifespan.py` to initialize database connection
+4. Swap `InMemoryRepository` for database repository
+5. No changes needed in services or routes!
 
 ---
 
